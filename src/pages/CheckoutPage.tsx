@@ -21,6 +21,17 @@ interface RecentMovement {
   sites: { name: string } | null
 }
 
+const LOAD_TIMEOUT_MS = 15000
+
+function withTimeout<T>(promise: PromiseLike<T>, ms = LOAD_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('通信がタイムアウトしました。電波状況を確認して再読み込みしてください。')), ms),
+    ),
+  ])
+}
+
 export function CheckoutPage() {
   const [products, setProducts] = useState<ProductOption[]>([])
   const [sites, setSites] = useState<string[]>([])
@@ -33,33 +44,44 @@ export function CheckoutPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [recent, setRecent] = useState<RecentMovement[]>([])
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const fetchRecent = useCallback(async () => {
-    const { data } = await supabase
-      .from('checkout_history')
-      .select('id, movement_type, quantity, created_at, note, products(name, color_code, unit), sites(name)')
-      .order('created_at', { ascending: false })
-      .limit(30)
-    if (data) setRecent(data as unknown as RecentMovement[])
+    const { data, error: fetchError } = await withTimeout(
+      supabase
+        .from('checkout_history')
+        .select('id, movement_type, quantity, created_at, note, products(name, color_code, unit), sites(name)')
+        .order('created_at', { ascending: false })
+        .limit(30),
+    )
+    if (fetchError) throw fetchError
+    setRecent((data ?? []) as unknown as RecentMovement[])
   }, [])
 
-  useEffect(() => {
-    supabase
-      .from('products')
-      .select('id, name, color_code, unit, current_stock')
-      .order('name')
-      .then(({ data }) => {
-        if (data) setProducts(data)
-      })
-    supabase
-      .from('sites')
-      .select('name')
-      .order('name')
-      .then(({ data }) => {
-        if (data) setSites(data.map((s) => s.name))
-      })
-    fetchRecent()
+  const loadInitialData = useCallback(async () => {
+    setInitialLoading(true)
+    setLoadError(null)
+    try {
+      const [productsRes, sitesRes] = await Promise.all([
+        withTimeout(supabase.from('products').select('id, name, color_code, unit, current_stock').order('name')),
+        withTimeout(supabase.from('sites').select('name').order('name')),
+      ])
+      if (productsRes.error) throw productsRes.error
+      if (sitesRes.error) throw sitesRes.error
+      setProducts(productsRes.data ?? [])
+      setSites((sitesRes.data ?? []).map((s) => s.name))
+      await fetchRecent()
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'データの読み込みに失敗しました')
+    } finally {
+      setInitialLoading(false)
+    }
   }, [fetchRecent])
+
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
 
   const selectedProduct = products.find((p) => p.id === productId)
 
@@ -105,6 +127,24 @@ export function CheckoutPage() {
       m.note ?? '',
     ])
     downloadCsv(`出庫戻庫履歴_${new Date().toISOString().slice(0, 10)}.csv`, toCsv(headers, rows))
+  }
+
+  if (initialLoading) {
+    return <p className="text-slate-500">読み込み中...</p>
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto w-full max-w-xl rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+        <p className="mb-3">{loadError}</p>
+        <button
+          onClick={loadInitialData}
+          className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100"
+        >
+          再読み込み
+        </button>
+      </div>
+    )
   }
 
   return (
