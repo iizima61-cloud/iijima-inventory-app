@@ -154,7 +154,7 @@ export function InventoryListPage() {
         <ProductThumbnail path={latestPhoto?.storage_path ?? null} alt={p.name} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-slate-900">{p.name}</p>
-          <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <div className="flex items-center gap-1.5 text-xs text-slate-600">
             {p.color_code && (
               <span
                 className="inline-block h-3 w-3 shrink-0 rounded-full border border-slate-300"
