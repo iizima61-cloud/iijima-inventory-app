@@ -6,6 +6,7 @@ import { uploadProductPhoto, deleteProductPhoto, getSignedPhotoUrl } from '../li
 import { useAuth } from '../contexts/AuthContext'
 import { CATEGORIES } from '../lib/categories'
 import { guessColorFromCode } from '../lib/colorGuess'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 const DEFAULT_SWATCH = '#cbd5e1'
 
@@ -41,6 +42,9 @@ export function ProductEditPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [photoToDelete, setPhotoToDelete] = useState<ExistingPhoto | null>(null)
+  const [deletingPhoto, setDeletingPhoto] = useState(false)
+  const [deletePhotoError, setDeletePhotoError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -154,14 +158,20 @@ export function ProductEditPage() {
     }
   }
 
-  const handleRemovePhoto = async (photo: ExistingPhoto) => {
-    if (!window.confirm('この写真を削除しますか?')) return
+  const handleRemovePhotoConfirmed = async () => {
+    if (!photoToDelete) return
+    setDeletePhotoError(null)
+    setDeletingPhoto(true)
     try {
-      await deleteProductPhoto(photo.storage_path)
-      await supabase.from('photos').delete().eq('id', photo.id)
-      setPhotos((prev) => prev.filter((p) => p.id !== photo.id))
+      await deleteProductPhoto(photoToDelete.storage_path)
+      const { error: deleteError } = await supabase.from('photos').delete().eq('id', photoToDelete.id)
+      if (deleteError) throw deleteError
+      setPhotos((prev) => prev.filter((p) => p.id !== photoToDelete.id))
+      setPhotoToDelete(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '写真の削除に失敗しました')
+      setDeletePhotoError(err instanceof Error ? err.message : '写真の削除に失敗しました')
+    } finally {
+      setDeletingPhoto(false)
     }
   }
 
@@ -362,7 +372,10 @@ export function ProductEditPage() {
                   )}
                   <button
                     type="button"
-                    onClick={() => handleRemovePhoto(photo)}
+                    onClick={() => {
+                      setDeletePhotoError(null)
+                      setPhotoToDelete(photo)
+                    }}
                     aria-label="削除"
                     className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-xs text-white"
                   >
@@ -416,6 +429,18 @@ export function ProductEditPage() {
           {submitting ? '保存中...' : '保存する'}
         </button>
       </form>
+
+      {photoToDelete && (
+        <ConfirmDialog
+          title="写真を削除しますか?"
+          message="この写真を削除します。元に戻せません。"
+          confirmLabel="削除する"
+          busy={deletingPhoto}
+          error={deletePhotoError}
+          onCancel={() => setPhotoToDelete(null)}
+          onConfirm={handleRemovePhotoConfirmed}
+        />
+      )}
     </div>
   )
 }

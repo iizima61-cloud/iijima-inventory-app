@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ProductThumbnail } from '../components/ProductThumbnail'
 import { PhotoLightbox } from '../components/PhotoLightbox'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { deleteProductPhoto } from '../lib/storage'
 
 interface ProductDetail {
@@ -47,6 +48,8 @@ export function ProductDetailPage() {
   const [logs, setLogs] = useState<InventoryLogRow[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
@@ -81,11 +84,9 @@ export function ProductDetailPage() {
     fetchAll()
   }, [fetchAll])
 
-  const handleDelete = async () => {
+  const handleDeleteConfirmed = async () => {
     if (!product) return
-    if (!window.confirm(`「${product.name}」を削除します。出庫戻庫・棚卸の履歴も全て削除され元に戻せません。よろしいですか?`)) {
-      return
-    }
+    setDeleteError(null)
     setDeleting(true)
     try {
       for (const photo of product.photos) {
@@ -95,7 +96,7 @@ export function ProductDetailPage() {
       if (error) throw error
       navigate('/')
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : '削除に失敗しました')
+      setDeleteError(err instanceof Error ? err.message : '削除に失敗しました')
       setDeleting(false)
     }
   }
@@ -125,7 +126,10 @@ export function ProductDetailPage() {
             編集
           </Link>
           <button
-            onClick={handleDelete}
+            onClick={() => {
+              setDeleteError(null)
+              setShowDeleteConfirm(true)
+            }}
             disabled={deleting}
             className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
           >
@@ -232,6 +236,18 @@ export function ProductDetailPage() {
           index={Math.min(lightboxIndex, lightboxUrls.length - 1)}
           onClose={() => setLightboxIndex(null)}
           onNavigate={setLightboxIndex}
+        />
+      )}
+
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="商品を削除しますか?"
+          message={`「${product.name}」を削除します。出庫戻庫・棚卸の履歴も全て削除され、元に戻せません。よろしいですか?`}
+          confirmLabel="削除する"
+          busy={deleting}
+          error={deleteError}
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={handleDeleteConfirmed}
         />
       )}
     </div>
