@@ -404,7 +404,6 @@ export function ProductEditPage() {
             type="file"
             accept="image/*"
             multiple
-            capture="environment"
             onChange={async (e) => {
               if (e.target.files) {
                 try {

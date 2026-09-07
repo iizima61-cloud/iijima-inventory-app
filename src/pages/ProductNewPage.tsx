@@ -317,7 +317,6 @@ export function ProductNewPage() {
             type="file"
             accept="image/*"
             multiple
-            capture="environment"
             onChange={(e) => {
               if (e.target.files) addFiles(e.target.files)
               e.target.value = ''
