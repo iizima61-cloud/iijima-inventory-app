@@ -92,23 +92,33 @@ export function CheckoutPage() {
     setSubmitting(true)
     try {
       const siteId = siteName.trim() ? await getOrCreateSite(siteName) : null
-      const { error: rpcError } = await supabase.rpc('record_stock_movement', {
-        p_product_id: productId,
-        p_site_id: siteId,
-        p_movement_type: movementType,
-        p_quantity: Number(quantity),
-        p_note: note || null,
-      })
+      const { error: rpcError } = await withTimeout(
+        supabase.rpc('record_stock_movement', {
+          p_product_id: productId,
+          p_site_id: siteId,
+          p_movement_type: movementType,
+          p_quantity: Number(quantity),
+          p_note: note || null,
+        }),
+      )
       if (rpcError) throw rpcError
 
       setMessage('記録しました')
       setQuantity('1')
       setNote('')
-      const { data } = await supabase.from('products').select('id, name, color_code, unit, current_stock').order('name')
-      if (data) setProducts(data)
-      fetchRecent()
+      try {
+        const { data, error: refetchError } = await withTimeout(
+          supabase.from('products').select('id, name, color_code, unit, current_stock').order('name'),
+        )
+        if (refetchError) throw refetchError
+        if (data) setProducts(data)
+        await fetchRecent()
+      } catch {
+        // 記録自体は成功しているので、一覧の再取得失敗は再読み込みボタンで案内するのみ
+        setError('記録は完了しましたが、一覧の更新に失敗しました。再読み込みしてください。')
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '記録に失敗しました')
+      setError(err instanceof Error ? err.message : '記録に失敗しました。もう一度お試しください。')
     } finally {
       setSubmitting(false)
     }
