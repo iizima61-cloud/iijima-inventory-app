@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ProductThumbnail } from '../components/ProductThumbnail'
+import { PhotoLightbox } from '../components/PhotoLightbox'
 import { deleteProductPhoto } from '../lib/storage'
 
 interface ProductDetail {
@@ -46,6 +47,8 @@ export function ProductDetailPage() {
   const [logs, setLogs] = useState<InventoryLogRow[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   const fetchAll = useCallback(async () => {
     if (!id) return
@@ -97,6 +100,12 @@ export function ProductDetailPage() {
     }
   }
 
+  const sortedPhotos = useMemo(
+    () => [...(product?.photos ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [product],
+  )
+  const lightboxUrls = sortedPhotos.map((p) => photoUrls[p.storage_path]).filter((u): u is string => !!u)
+
   if (loading) return <p className="text-slate-500">読み込み中...</p>
   if (!product) return <p className="text-slate-500">商品が見つかりません。</p>
 
@@ -132,12 +141,16 @@ export function ProductDetailPage() {
         <h1 className="mb-3 text-xl font-bold text-slate-800">{product.name}</h1>
 
         <div className="mb-4 flex gap-2 overflow-x-auto">
-          {product.photos.length === 0 && <ProductThumbnail path={null} alt={product.name} />}
-          {product.photos
-            .sort((a, b) => b.created_at.localeCompare(a.created_at))
-            .map((photo) => (
-              <ProductThumbnail key={photo.id} path={photo.storage_path} alt={product.name} />
-            ))}
+          {sortedPhotos.length === 0 && <ProductThumbnail path={null} alt={product.name} />}
+          {sortedPhotos.map((photo, i) => (
+            <ProductThumbnail
+              key={photo.id}
+              path={photo.storage_path}
+              alt={product.name}
+              onClick={() => setLightboxIndex(i)}
+              onLoaded={(url) => setPhotoUrls((prev) => ({ ...prev, [photo.storage_path]: url }))}
+            />
+          ))}
         </div>
 
         <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
@@ -212,6 +225,15 @@ export function ProductDetailPage() {
           ))}
         </ul>
       </div>
+
+      {lightboxIndex !== null && lightboxUrls.length > 0 && (
+        <PhotoLightbox
+          urls={lightboxUrls}
+          index={Math.min(lightboxIndex, lightboxUrls.length - 1)}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
+        />
+      )}
     </div>
   )
 }
