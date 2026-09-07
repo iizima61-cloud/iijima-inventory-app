@@ -22,6 +22,7 @@ export function ProductEditPage() {
 
   const [manufacturers, setManufacturers] = useState<string[]>([])
   const [productNames, setProductNames] = useState<string[]>([])
+  const [nameToManufacturer, setNameToManufacturer] = useState<Map<string, string>>(new Map())
   const [locations, setLocations] = useState<string[]>([])
   const [manufacturerName, setManufacturerName] = useState('')
   const [name, setName] = useState('')
@@ -52,10 +53,16 @@ export function ProductEditPage() {
       })
     supabase
       .from('products')
-      .select('name')
+      .select('name, manufacturers(name)')
       .order('name')
       .then(({ data }) => {
-        if (data) setProductNames([...new Set(data.map((p) => p.name))])
+        if (!data) return
+        setProductNames([...new Set(data.map((p) => p.name))])
+        const map = new Map<string, string>()
+        for (const p of data as unknown as { name: string; manufacturers: { name: string } | null }[]) {
+          if (p.manufacturers?.name && !map.has(p.name)) map.set(p.name, p.manufacturers.name)
+        }
+        setNameToManufacturer(map)
       })
     supabase
       .from('products')
@@ -102,6 +109,14 @@ export function ProductEditPage() {
         setLoading(false)
       })
   }, [id])
+
+  const handleNameChange = (value: string) => {
+    setName(value)
+    if (!manufacturerName.trim()) {
+      const matched = nameToManufacturer.get(value)
+      if (matched) setManufacturerName(matched)
+    }
+  }
 
   const handleColorCodeChange = (value: string) => {
     setColorCode(value)
@@ -216,7 +231,7 @@ export function ProductEditPage() {
             required
             list="product-name-list"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => handleNameChange(e.target.value)}
             placeholder="既存を選ぶか新規入力"
             className="w-full rounded-md border border-slate-300 px-3 py-2"
           />
